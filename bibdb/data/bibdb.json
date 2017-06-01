@@ -1,0 +1,29 @@
+{
+    "path": {
+        "database": "~/Dropbox/Paper/library.sqlite",
+        "journal_db": "~/Dropbox/Paper/journal.sqlite",
+        "library": "~/Dropbox/Paper/library.bib"
+    },
+    "files": {
+        "pdf": {
+            "folder": "~/Dropbox/Paper/pdf/",
+            "extension": ".pdf",
+            "opener": "evince"
+        },
+        "temp-pdf": {
+            "folder": "~/Downloads/",
+            "extension": ".pdf",
+            "opener": "evince"
+        },
+        "bib": {
+            "folder": "~/Downloads/",
+            "extension": [".bib", ".txt"],
+            "opener": "gvim"
+        },
+        "comment": {
+            "folder": "~/Dropbox/Paper/comment/",
+            "extension": ".txt",
+            "opener": "gvim"
+        }
+    }
+}
