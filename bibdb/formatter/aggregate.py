@@ -1,6 +1,6 @@
 from typing import List
-from .entry import SimpleFormatter
-from ..entry import Person
+from .entry import SimpleFormatter, BibtexFormatter
+from ..entry.main import Person
 
 
 ORDER_STR = {1: 'st', 2: 'nd', 3: 'rd'}
@@ -21,11 +21,11 @@ class AuthoredList(object):
             raise ValueError("no author found")
         result_str = list()
         for author in authors:
-            result_str.append(self.ind_formatter.name_filter([author]) + ':')
-            authored = sorted([(x.item.year, x.order, x.item) for x in author.authorship])
+            result_str.append(BibtexFormatter.name_filter([author]) + ':')
+            authored = sorted([(x.item.year, x.order + 1, x.item) for x in author.authorship])
             result_str.extend(('\t{0.id}: as {1} author, {2}\n'.format(
                 x[2], self._order_str(x[1]), self.ind_formatter(x[2])) for x in authored))
-            edited = sorted([(x.item.year, x.order, x.item) for x in author.editorship])
+            edited = sorted([(x.item.year, x.order + 1, x.item) for x in author.editorship])
             result_str.extend(('\t{0.id}: as {1} editor, {2}\n'.format(
                 x[2], self._order_str(x[1]), self.ind_formatter(x[2])) for x in edited))
-        return ''.join(result_str)
+        return '\n'.join(result_str)

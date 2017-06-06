@@ -26,11 +26,11 @@ item_table = Table('item', ItemBase.metadata,
                    Column('title', LARGE_TEXT, unique=True, nullable=False),
                    Column('year', Integer, nullable=False),
                    Column('journal_id', Integer, ForeignKey("journal.id")),
-                   *(Column(*key_value) for key_value in all_fields.update(extra_fields).items()))
+                   *(Column(*key_value) for key_value in {**all_fields, **extra_fields}.items()))
 
 keyword_assoc = Table('association', ItemBase.metadata,
-                      Column('left_id', Integer, ForeignKey('left.id')),
-                      Column('right_id', Integer, ForeignKey('right.id')))
+                      Column('item_id', Integer, ForeignKey('item.id')),
+                      Column('keyword_id', Integer, ForeignKey('keyword.id')))
 
 
 class Item(ItemBase):
@@ -38,7 +38,6 @@ class Item(ItemBase):
     __mapper_args__ = {'polymorphic_on': 'object_type'}
     __tablename__ = 'item'
     author = association_proxy("authorship", "person"),
-    keyword = relationship(Keyword, secondary=keyword_assoc, backref="item")
     required_fields = {'id', 'title', 'year'}
     optional_fields = {'address', 'month', 'note', 'doi', 'eprint', 'url'}
 
@@ -66,7 +65,7 @@ class Authorship(ItemBase):
     order = Column(Integer)
     note = Column(String)
     __tablename__ = "authorship"
-    __table_args__ = (UniqueConstraint("item.id", "order"),)
+    __table_args__ = (UniqueConstraint("item_id", "order"),)
 
 
 class Editorship(ItemBase):
@@ -77,13 +76,14 @@ class Editorship(ItemBase):
     order = Column(Integer)
     note = Column(String)
     __tablename__ = "editorship"
-    __table_args__ = (UniqueConstraint("item.id", "order"),)
+    __table_args__ = (UniqueConstraint("item_id", "order"),)
 
 
 class Keyword(ItemBase):
     __tablename__ = 'keyword'
     id = Column(Integer, primary_key=True)
     text = Column(SMALL_TEXT, unique=True)
+    item = relationship(Item, secondary=keyword_assoc, backref="keyword")
 
 
 @listens_for(Session, 'after_flush')
@@ -94,14 +94,6 @@ def delete_orphan_keyword(session, _):
 @listens_for(Session, 'after_flush')
 def delete_orphan_person(session, _):
     session.query(Person).filter(and_(~Person.authored.any(), ~Person.edited.any())).delete(synchronize_session=False)
-
-
-@listens_for(Session, 'after_flush')
-def delete_orphan_file(session, _):
-    files = session.query(ItemFile).filter(~ItemFile.item.any()).all()
-    for file in files:
-        file.delete()
-        session.delete(file, synchronize_session=False)
 
 
 class Journal(ItemBase):
@@ -115,6 +107,11 @@ class Journal(ItemBase):
         for key, value in data_in.items():
             if hasattr(self, key):
                 setattr(self, key, value)
+
+
+@listens_for(Session, 'after_flush')
+def delete_orphan_journal(session, _):
+    session.query(Journal).filter(and_(~Journal.article.any())).delete(synchronize_session=False)
 
 
 ## bibtex entry types
@@ -167,7 +164,7 @@ class Manual(Item):
 
 class MasterThesis(Item):
     __mapper_args__ = {'polymorphic_on': 'object_type', 'polymorphic_identity': 'masterthesis'}
-    school = Column(SMALL_TEXT)
+    required_fields = Item.required_fields | {'school'}
     optional_fields = Item.optional_fields | {'type'}
 
 
@@ -179,7 +176,7 @@ class Misc(Item):
 
 class PhdThesis(Item):
     __mapper_args__ = {'polymorphic_on': 'object_type', 'polymorphic_identity': 'phdthesis'}
-    school = Column(SMALL_TEXT)
+    required_fields = Item.required_fields | {'school'}
     optional_fields = Item.optional_fields | {'type'}
 
 
@@ -191,7 +188,7 @@ class Proceedings(Item):
 
 class TechReport(Item):
     __mapper_args__ = {'polymorphic_on': 'object_type', 'polymorphic_identity': 'techreport'}
-    institution = Column(SMALL_TEXT)
+    required_fields = Item.required_fields | {'institution'}
     optional_fields = Item.optional_fields | {'number', 'type'}
 
 

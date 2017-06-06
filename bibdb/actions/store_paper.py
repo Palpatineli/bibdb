@@ -1,6 +1,6 @@
-from ..entry import Session, item_types, Item, Person, Authorship, Editorship, Keyword, Journal
+from ..entry.main import Session, item_types, Item, Person, Authorship, Editorship, Keyword, Journal, and_
 from ..entry.file_object import Unregistered, PdfFile
-from ..formatter import SimpleFormatter, IdFormatter, FileNameFormatter
+from ..formatter.entry import SimpleFormatter, FileNameFormatter
 from ..reader.bibtex import BibtexReader
 from ..data.journal import search_journal
 
@@ -12,25 +12,26 @@ class StorePaperException(Exception):
 def store_paper(args):
     bib_file = Unregistered.find()
     entry = BibtexReader(bib_file.open())().entries[0]
-    item = item_types[entry['type']](entry)
+    item = item_types[entry['ENTRYTYPE']](entry)
     new_keywords = {x.strip() for x in ' '.join(args.keyword).split(',')} if args.keyword else set()
     if 'keyword' in entry:
         new_keywords |= set(entry['keyword'])
     session = Session()
 
     try:
-        print(SimpleFormatter()(item))
+        print(item.title)
         try:
-            temp_pdf_file = PdfFile.find()
+            temp_pdf_file = PdfFile.find('temp-pdf')
             print('\tFile: {0}'.format(temp_pdf_file.name))
-        except IOError:
+        except IOError as e:
+            print(e)
             temp_pdf_file = None
             print('\tFile: None')
         if input('(a)abort, (c)continue?') != 'c':
             print("aborted")
             return
 
-        item.id = IdFormatter()(item)
+        item.id = entry['author'][0][0] + str(entry['year'])
         while True:
             conflicting_item = session.query(Item).filter(Item.id == item.id).first()
             if conflicting_item is None:
@@ -40,9 +41,8 @@ def store_paper(args):
             if choice == 'a':
                 raise StorePaperException("manually aborted")
             elif choice == 'u':
-                item.keyword.extend(conflicting_item.keyword)
+                item = conflicting_item
                 new_keywords -= set(map(lambda x: x.text, conflicting_item.keyword))
-                item.file.extend(conflicting_item.file)
                 break
             else:
                 item.id = choice
@@ -63,7 +63,6 @@ def store_paper(args):
             pdf_files = [file for file in item.file if isinstance(file, PdfFile)]
             if len(pdf_files) == 0:
                 temp_pdf_file.move('pdf', FileNameFormatter()(item))
-                item.file.append(temp_pdf_file)
             else:  # add or replace file
                 print("pdf_file exists!\n" + '\n'.join('{0}: {1.name}'.format(*x) for x in enumerate(pdf_files)))
                 choice = input('(c)do nothing; (N) replace the Nth file; or put a short word as new '
@@ -78,14 +77,16 @@ def store_paper(args):
                         suffix = choice
                         new_name = FileNameFormatter()(entry, suffix)
                     temp_pdf_file.move('pdf', new_name)
-                    item.file.append(temp_pdf_file)
+            item.file.append(temp_pdf_file)
+            session.add(temp_pdf_file)
+        session.add(item)
         session.commit()
+        print('successfully inserted the following entry:')
+        print(SimpleFormatter()(session.query(Item).filter(Item.id == item.id).one()))
     except StorePaperException as e:
         session.rollback()
         print(e)
         return
-    print('successfully inserted the following entry:')
-    print(SimpleFormatter()(item))
 
 
 def add_person(session, name, order, relation_class, proxy):
@@ -94,11 +95,11 @@ def add_person(session, name, order, relation_class, proxy):
     if len(persons) == 0:
         person = Person(last_name=last_name, first_name=first_name)
     else:
-        print(("Who's this author? ({0}, {1})".format(*name)))
         match = [idx for idx, x in enumerate(persons) if first_name == x.first_name]
-        if any(match):
+        if len(match) > 0:
             person = persons[match[0]]
         else:
+            print(("Who's this author? ({0}, {1})".format(*name)))
             for idx, old_person in enumerate(persons):
                 print(('{0}. {1}, {2}'.format(idx, old_person.last_name.title(),
                                               old_person.first_name.title())))
@@ -114,8 +115,12 @@ def add_person(session, name, order, relation_class, proxy):
                 person = persons[int(choice)]
                 if new_name:
                     person.first_name = new_name
-    relation = relation_class(order=order, person=person)
-    proxy.append(relation)
+    exist_relation = session.query(relation_class).filter(and_(
+        relation_class.order == order, Person.last_name == person.last_name,
+        Person.first_name == person.first_name)).first()
+    relation = exist_relation if exist_relation else relation_class(order=order, person=person)
+    if relation not in proxy:
+        proxy.append(relation)
 
 
 def update_keywords(session, new_keywords, proxy):

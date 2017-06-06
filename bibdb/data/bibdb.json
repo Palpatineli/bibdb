@@ -1,12 +1,11 @@
 {
     "path": {
-        "database": "~/Dropbox/Paper/library.sqlite",
-        "journal_db": "~/Dropbox/Paper/journal.sqlite",
-        "library": "~/Dropbox/Paper/library.bib"
+        "database": "~/Dropbox/Paper_test/library.sqlite",
+        "journal_db": "~/Dropbox/Paper_test/journal.sqlite"
     },
     "files": {
         "pdf": {
-            "folder": "~/Dropbox/Paper/pdf/",
+            "folder": "~/Dropbox/Paper_test/pdf/",
             "extension": ".pdf",
             "opener": "evince"
         },
@@ -21,7 +20,7 @@
             "opener": "gvim"
         },
         "comment": {
-            "folder": "~/Dropbox/Paper/comment/",
+            "folder": "~/Dropbox/Paper_test/comment/",
             "extension": ".txt",
             "opener": "gvim"
         }

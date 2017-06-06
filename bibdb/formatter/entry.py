@@ -11,6 +11,8 @@ class Formatter(object):
     def name_filter(persons: List[Person]) -> str:
         if len(persons) > 1:
             return (persons[0].last_name + '_' + persons[1].last_name).replace(' ', '')
+        else:
+            return persons[0].last_name.replace(' ', '')
 
     def __call__(self, entry: Item):
         raise NotImplementedError
@@ -18,7 +20,7 @@ class Formatter(object):
 
 class TitleFormatter(Formatter):
     @staticmethod
-    def _name_filter(persons: List[Person]) -> str:
+    def name_filter(persons: List[Person]) -> str:
         if len(persons) == 0:
             return ''
         author_list = [str.title('{0.first_name} {0.last_name}'.format(author)) for author in persons]
@@ -28,8 +30,8 @@ class TitleFormatter(Formatter):
             return '% ' + author_list[0]
 
     def __call__(self, entry: Item):
-        str_list = [self._name_filter(entry.author) if hasattr(entry, 'author') else '',
-                    self._name_filter(entry.editor) if hasattr(entry, 'editor') else '',
+        str_list = [self.name_filter([x.person for x in entry.authorship]) if len(entry.authorship) > 0 else '',
+                    self.name_filter([x.person for x in entry.editorship]) if len(entry.editorship) > 0 else '',
                     '% {0.title}\n% {0.year}\n\n']
         return ''.join(str_list).format(entry)
 
@@ -43,7 +45,7 @@ class FileNameFormatter(Formatter):
         str_list = [entry.id]
         if len(suffix) > 0:
             str_list.append(suffix)
-        str_list.extend([self.name_filter(entry.author), entry.year,
+        str_list.extend([self.name_filter([x.person for x in entry.authorship]), entry.year,
                          self.italic.sub(r'\1', entry.title.replace(' ', '_'))])
         return self._sanitize('_'.join(str_list))
 
@@ -74,25 +76,27 @@ _field_ids = ['year', 'title', 'journal', 'booktitle', 'chapter', 'pages', 'publ
 class SimpleFormatter(Formatter):
     filters = {'chapter': lambda x: ' Chapter {0}'.format(x),
                'school': lambda x: ' From {0}'.format(x),
-               'institution': lambda x: ' From {0}'.format(x)}
+               'institution': lambda x: ' From {0}'.format(x),
+               'journal': lambda x: x.name}
 
     @staticmethod
-    def _name_filter(persons: List[Person]) -> str:
+    def name_filter(persons: List[Person]) -> str:
         if len(persons) == 0:
             return ''
         persons = [str.title('{0.first_name} {0.last_name}'.format(author)) for author in persons]
-        return '{0} & {1}\n'.format(', '.join(persons[0:-1]), persons[-1]) if len(persons) > 1 else persons[0]
+        return '{0} & {1}'.format(', '.join(persons[0:-1]), persons[-1]) if len(persons) > 1 else persons[0]
 
     def __call__(self, entry: Item) -> str:
-        str_list = [self._name_filter(entry.author) if hasattr(entry, 'author') else '',
-                    self._name_filter(entry.editor) if hasattr(entry, 'editor') else '']
-        for field_id in set(_field_ids) & set(entry.__dict__):
-            value = getattr(entry, field_id)
-            if field_id == 'number':
-                str_list.append('({0})'.format(value) if hasattr(entry, 'volume') else ' ' + str(value))
-            else:
-                str_list.append(self.filters[field_id](value) if field_id in self.filters else value)
-        return ''.join(str_list)
+        str_list = [self.name_filter([x.person for x in entry.authorship]),
+                    self.name_filter([x.person for x in entry.editorship])]
+        for field_id in set(_field_ids):
+            if hasattr(entry, field_id) and getattr(entry, field_id) is not None:
+                value = getattr(entry, field_id)
+                if field_id == 'number':
+                    str_list.append('({0})'.format(value) if hasattr(entry, 'volume') else ' ' + str(value))
+                else:
+                    str_list.append(self.filters[field_id](value) if field_id in self.filters else value)
+        return ', '.join([str(x) for x in str_list if x])
 
 
 class BibtexFormatter(Formatter):
@@ -137,10 +141,10 @@ class IdFormatter(Formatter):
         return ''.join(map(lambda x: normalize('NFKD', x)[0], persons[0].last_name.lower().replace(' ', '')))
 
     def __call__(self, entry: Item, suffix: str=None):
-        if hasattr(entry, 'author') and len(entry.author) > 0:
-            result_str = self.name_filter(entry.author)
-        elif hasattr(entry, 'editor') and len(entry.editor) > 0:
-            result_str = self.name_filter(entry.editor)
+        if len(entry.authorship) > 0:
+            result_str = self.name_filter([x.person for x in entry.authorship])
+        elif len(entry.editorship) > 0:
+            result_str = self.name_filter([x.person for x in entry.editorship])
         else:
             result_str = 'anon'
         if hasattr(entry, 'year'):

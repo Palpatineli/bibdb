@@ -1,6 +1,6 @@
 from argparse import ArgumentParser
-from . import actions
-from .actions import store_paper
+from .actions import main as actions
+from .actions.store_paper import store_paper
 
 
 def parse_args():
@@ -49,7 +49,4 @@ def parse_args():
     add_parser.set_defaults(func=actions.initialize)
 
     args = parser.parse_args()
-    try:
-        args.func(args)
-    except AttributeError:
-        parser.print_help()
+    args.func(args)
