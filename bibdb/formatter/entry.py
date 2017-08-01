@@ -1,8 +1,10 @@
-from typing import List
 import re
+from typing import List
 from unicodedata import normalize
+
 from bibtexparser.bibdatabase import BibDatabase
 from bibtexparser.bwriter import BibTexWriter
+
 from ..entry.main import Item, Person
 
 
@@ -47,7 +49,7 @@ class FileNameFormatter(Formatter):
             str_list.append(suffix)
         str_list.extend([self.name_filter([x.person for x in entry.authorship]), entry.year,
                          self.italic.sub(r'\1', entry.title.replace(' ', '_'))])
-        return self._sanitize('_'.join(str_list))
+        return self._sanitize('_'.join(map(str, str_list)))
 
     @staticmethod
     def __shorten_name(string: str) -> str:
@@ -69,10 +71,6 @@ class FileNameFormatter(Formatter):
         return filename
 
 
-_field_ids = ['year', 'title', 'journal', 'booktitle', 'chapter', 'pages', 'publisher', 'school',
-              'institution', 'address', 'note']
-
-
 class SimpleFormatter(Formatter):
     filters = {'chapter': lambda x: ' Chapter {0}'.format(x),
                'school': lambda x: ' From {0}'.format(x),
@@ -89,7 +87,7 @@ class SimpleFormatter(Formatter):
     def __call__(self, entry: Item) -> str:
         str_list = [self.name_filter([x.person for x in entry.authorship]),
                     self.name_filter([x.person for x in entry.editorship])]
-        for field_id in set(_field_ids):
+        for field_id in entry.optional_fields | entry.required_fields - {'id', 'journal_id'} | {'journal'}:
             if hasattr(entry, field_id) and getattr(entry, field_id) is not None:
                 value = getattr(entry, field_id)
                 if field_id == 'number':
@@ -99,24 +97,24 @@ class SimpleFormatter(Formatter):
         return ', '.join([str(x) for x in str_list if x])
 
 
+def title_filter(title: str) -> str:
+    """escapes capitals because most bibtex systems apply title case"""
+    return ' '.join((BibtexFormatter.title_regex.sub(r'{{\1}}', word.strip()) for word in title.split()))
+
+
+def name_filter(persons: List[Person]) -> str:
+    return ' and '.join((str.title('{0.last_name}, {0.first_name}'.format(person)) for person in persons))
+
+
 class BibtexFormatter(Formatter):
-    _title_regex = re.compile(r'^(.+[A-Z].*)$')
-
-    @staticmethod
-    def title_filter(title: str) -> str:
-        """escapes capitals because most bibtex systems apply title case"""
-        return ' '.join((BibtexFormatter._title_regex.sub(r'{{\1}}', word.strip()) for word in title.split()))
-
-    @staticmethod
-    def name_filter(persons: List[Person]) -> str:
-        return ' and '.join((str.title('{0.last_name}, {0.first_name}'.format(person)) for person in persons))
+    title_regex = re.compile(r'^(.+[A-Z].*)$')
 
     _filters = {
-        'author': name_filter,
-        'editor': name_filter,
         'pdf_file': ', '.join,
         'comment_file': ', '.join,
         'keyword': ', '.join,
+        'year': str,
+        'journal': lambda x: x.name,
         'title': title_filter}
 
     def __init__(self, writer: BibTexWriter=None):
@@ -125,12 +123,21 @@ class BibtexFormatter(Formatter):
     def __call__(self, entry: Item) -> str:
         db = BibDatabase()
         entry_dict = dict()
-        for field_id in set(_field_ids) & set(entry.__dict__):
-            value = getattr(entry, field_id)
+        entry_dict['ENTRYTYPE'] = type(entry).__name__.lower()
+        entry_dict['ID'] = entry.id
+        if len(entry.authorship) > 0:
+            entry_dict['author'] = name_filter([x.person for x in entry.authorship])
+        if len(entry.editorship) > 0:
+            entry_dict['editor'] = name_filter([x.person for x in entry.editorship])
+        for field_id in entry.optional_fields | entry.required_fields - {'id', 'journal_id'} | {'journal'}:
+            value = getattr(entry, field_id, None)
+            if value is None:
+                continue
             if field_id in self._filters:
                 entry_dict[field_id] = self._filters[field_id](value)
             else:
-                entry_dict[field_id] = value
+                entry_dict[field_id] = str(value)
+        db.entries.append(entry_dict)
         writer = self._bib_writer if self._bib_writer else BibTexWriter()
         return writer.write(db)
 

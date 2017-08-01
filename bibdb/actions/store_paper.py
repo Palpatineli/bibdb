@@ -1,12 +1,101 @@
-from ..entry.main import Session, item_types, Item, Person, Authorship, Editorship, Keyword, Journal, and_
-from ..entry.file_object import Unregistered, PdfFile
+from ..data.journal import search_journal
+from ..entry.file_object import Unregistered, PdfFile, CommentFile
+from ..entry.main import Session, item_types, Item, Person, Authorship, Editorship, Keyword, Journal
 from ..formatter.entry import SimpleFormatter, FileNameFormatter
 from ..reader.bibtex import BibtexReader
-from ..data.journal import search_journal
+from ..utils import normalize
 
 
 class StorePaperException(Exception):
     pass
+
+
+def fix_authorship():
+    import sys
+    session = Session()
+    entries = BibtexReader(open(sys.argv[1], 'r'))().entries
+    for entry in entries:
+        item = session.query(Item).filter(Item.id == entry['ID']).first()
+        if item:
+            if 'author' in entry:
+                try:
+                    author_number = len(entry['author'])
+                    authors = session.query(Authorship).join(Item).filter(Item.id == item.id).all()
+                    for missing_number in set(range(author_number)) - set([author.order for author in authors]):
+                        author = session.query(Person).join(Authorship). \
+                            filter((Person.last_name == entry['author'][missing_number][0]) &
+                                   (Authorship.order == missing_number)).first()
+                        if author:
+                            relationship = Authorship(item=item, order=missing_number, person=author)
+                            session.add(relationship)
+                            session.commit()
+                except Exception as e:
+                    print(entry['author'])
+                    session.rollback()
+                    # noinspection PyUnboundLocalVariable
+                    print(item.id, set(range(author_number)), set([author.order for author in authors]),
+                          set(range(author_number)) - set([author.order for author in authors]))
+                    raise e
+            if 'editor' in entry:
+                editor_number = len(entry['editor'])
+                editors = session.query(Editorship).join(Item).filter(Item.id == entry['ID']).all()
+                for missing_number in set(range(editor_number)) - set([editor.order for editor in editors]):
+                    editor = session.query(Person).join(Editorship). \
+                        filter((Person.last_name == entry['editor'][missing_number][0]) &
+                               (Editorship.order == missing_number)).first()
+                    if editor:
+                        relationship = Editorship(item=item, order=missing_number, person=editor)
+                        session.add(relationship)
+    session.commit()
+
+
+def import_bib():
+    def add_person_direct(name, order, relation_class, proxy):
+        last_name, first_name = map(str.lower, name)
+        persons = session.query(Person).filter((Person.last_name == last_name) &
+                                               (Person.first_name == first_name)).all()
+        if len(persons) == 0:
+            person_obj = Person(last_name=last_name, first_name=first_name)
+        else:
+            person_obj = persons[0]
+        relation = relation_class(order=order, person=person_obj)
+        if relation not in proxy:
+            proxy.append(relation)
+
+    import sys
+    session = Session()
+    entries = BibtexReader(open(sys.argv[1], 'r'))().entries
+    for entry in entries:
+        item = session.query(Item).filter((Item.title == entry['title']) | (Item.id == entry['ID'])).first()
+        if item:
+            continue
+        try:
+            item = item_types[entry['ENTRYTYPE']](entry)
+            if 'keyword' in entry:
+                update_keywords(session, set(entry['keyword']), item.keyword)
+            if 'author' in entry:
+                for idx, person in enumerate(entry['author']):
+                    add_person_direct(person, idx, Authorship, item.authorship)
+            if 'editor' in entry:
+                for idx, person in enumerate(entry['editor']):
+                    add_person_direct(person, idx, Editorship, item.editorship)
+            if 'journal' in entry:
+                set_journal(session, entry['journal'], item)
+            if 'pdf_file' in entry:
+                for file_name in entry['pdf_file']:
+                    pdf_file = PdfFile(file_name)
+                    item.file.append(pdf_file)
+                    session.add(pdf_file)
+            if 'comment_file' in entry:
+                for file_name in entry['comment_file']:
+                    comment_file = CommentFile(file_name)
+                    item.file.append(comment_file)
+                    session.add(comment_file)
+            session.add(item)
+            session.commit()
+        except StorePaperException as e:
+            session.rollback()
+            raise e
 
 
 def store_paper(args):
@@ -31,7 +120,10 @@ def store_paper(args):
             print("aborted")
             return
 
-        item.id = entry['author'][0][0] + str(entry['year'])
+        entry['author'] = [(normalize(last_name), normalize(first_name)) for last_name, first_name in entry['author']]
+        if not (('author' in entry) or ('editor' in entry)) or 'year' in entry:
+            item.id = entry['ID']
+        item.id = entry['author'][0][0] if 'author' in entry else entry['editor'][0][0] + str(entry['year'])
         while True:
             conflicting_item = session.query(Item).filter(Item.id == item.id).first()
             if conflicting_item is None:
@@ -41,8 +133,11 @@ def store_paper(args):
             if choice == 'a':
                 raise StorePaperException("manually aborted")
             elif choice == 'u':
+                for field in item.required_fields | item.optional_fields:
+                    if hasattr(item, field):
+                        setattr(conflicting_item, field, getattr(item, field))
                 item = conflicting_item
-                new_keywords -= set(map(lambda x: x.text, conflicting_item.keyword))
+                conflicting_item.authorship[:] = []
                 break
             else:
                 item.id = choice
@@ -51,10 +146,10 @@ def store_paper(args):
 
         if 'author' in entry:
             for idx, person in enumerate(entry['author']):
-                add_person(session, person, idx, Authorship, item.authorship)
+                add_person(session, person, idx, Authorship, item.authorship, item.id)
         if 'editor' in entry:
             for idx, person in enumerate(entry['editor']):
-                add_person(session, person, idx, Editorship, item.editorship)
+                add_person(session, person, idx, Editorship, item.editorship, item.id)
 
         if 'journal' in entry:
             set_journal(session, entry['journal'], item)
@@ -75,7 +170,7 @@ def store_paper(args):
                         session.delete(old_file)
                     except ValueError:
                         suffix = choice
-                        new_name = FileNameFormatter()(entry, suffix)
+                        new_name = FileNameFormatter()(item, suffix)
                     temp_pdf_file.move('pdf', new_name)
             item.file.append(temp_pdf_file)
             session.add(temp_pdf_file)
@@ -89,7 +184,7 @@ def store_paper(args):
         return
 
 
-def add_person(session, name, order, relation_class, proxy):
+def add_person(session, name, order, relation_class, proxy, item_id):
     last_name, first_name = map(str.lower, name)
     persons = session.query(Person).filter(Person.last_name == last_name).all()
     if len(persons) == 0:
@@ -115,9 +210,9 @@ def add_person(session, name, order, relation_class, proxy):
                 person = persons[int(choice)]
                 if new_name:
                     person.first_name = new_name
-    exist_relation = session.query(relation_class).filter(and_(
-        relation_class.order == order, Person.last_name == person.last_name,
-        Person.first_name == person.first_name)).first()
+    exist_relation = session.query(relation_class).join(Person).filter(
+        (relation_class.order == order) & (Person.last_name == person.last_name) &
+        (Person.first_name == person.first_name) & (relation_class.item_id == item_id)).first()
     relation = exist_relation if exist_relation else relation_class(order=order, person=person)
     if relation not in proxy:
         proxy.append(relation)
@@ -133,10 +228,33 @@ def update_keywords(session, new_keywords, proxy):
 
 
 def set_journal(session, journal_name, item):
-    try:
+    while True:
         journal = search_journal(journal_name)
-    except ValueError:
-        raise StorePaperException
-    existing = session.query(Journal).filter(Journal.name == journal['name']).first()
-    journal = existing if existing else Journal(journal)
-    item.journal = journal
+        if journal is None:
+            existing = session.query(Journal).filter(Journal.name == journal_name).first()
+            if existing:
+                item.journal = existing
+                return
+            else:
+                print('journal name not found: ' + journal_name)
+                # noinspection SpellCheckingInspection
+                choice = input('please input journal name, abbreviation, and abbreviation without dot form. '
+                               'or (a)bort: ')
+                if choice == 'a' or choice == '':
+                    raise StorePaperException
+                names = list(map(str.strip, choice.split(',')))
+                if len(names) == 1:
+                    journal_name = names
+                elif len(names) == 3:
+                    existing = session.query(Journal).filter(Journal.name == names[0]).first()
+                    if existing:
+                        existing.abbr, existing.abbr_no_dot = names[1], names[2]
+                        item.journal = existing
+                    else:
+                        item.journal = Journal(dict(zip(('name', 'abbr', 'abbr_no_dot'), names)))
+                    return
+        else:
+            existing = session.query(Journal).filter(Journal.name == journal['name']).first()
+            journal = existing if existing else Journal(journal)
+            item.journal = journal
+            return

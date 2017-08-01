@@ -1,8 +1,9 @@
 """handles journal names and abbreviations in a separate database. only works with sqlite"""
-from typing import Dict, Union
+import sqlite3 as sql
 from io import BufferedIOBase, TextIOWrapper
 from os.path import isfile
-import sqlite3 as sql
+from typing import Dict, Union
+
 from ..config import config
 
 CREATE = 'CREATE VIRTUAL TABLE "journal" USING fts4("name", "abbr", "abbr_no_dot");'
@@ -26,10 +27,10 @@ def add_journals(file_name: Union[str, BufferedIOBase]) -> None:
     cur.execute('PRAGMA synchronous = NORMAL')
 
 
-def search_journal(query: str) -> Dict[str, str]:
+def search_journal(query: str) -> Union[Dict[str, str], None]:
     database_path = config['path']['journal_db']
     conn = sql.connect(database_path)
     journal = conn.cursor().execute(SEARCH, (query, )).fetchone()
     if journal is None:
-        raise ValueError('cannot find matching journal name ' + query)
+        return None
     return dict(zip(('name', 'abbr', 'abbr_no_dot'), journal))

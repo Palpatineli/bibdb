@@ -1,10 +1,11 @@
 from argparse import ArgumentParser
+
 from .actions import main as actions
 from .actions.store_paper import store_paper
 
 
 def parse_args():
-    parser = ArgumentParser("bibpdf", description="a tool to manage literature library",
+    parser = ArgumentParser("bibdb", description="a tool to manage literature library",
                             epilog="citation is usually $first_author_last_name$year")
     subparsers = parser.add_subparsers(help='commands')
 
