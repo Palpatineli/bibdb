@@ -1,11 +1,12 @@
 import os
-from os import path, makedirs
 from glob import glob
+from os import path, makedirs
+
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship, backref, reconstructor
 
-from ..formatter.entry import TitleFormatter
 from .main import ItemBase, config, listens_for, Session
+from ..formatter.entry import TitleFormatter
 
 SMALL_TEXT = String(50)
 LARGE_TEXT = String(150)
@@ -69,6 +70,9 @@ class ItemFile(ItemBase, NewSearchable):
     def __repr__(self) -> str:
         return path.join(self.folder, self.name + self.extension)
 
+    def __str__(self):
+        return self.name
+
     def open(self):
         file_path = path.join(self.folder, self.name + self.extension)
         import subprocess
@@ -77,7 +81,6 @@ class ItemFile(ItemBase, NewSearchable):
             pid = subprocess.Popen([self.opener, file_path],
                                    creationflags=detach_process).pid
         else:
-            print(self.opener, file_path)
             devnull = open(os.devnull, 'wb')
             pid = subprocess.Popen(['nohup', self.opener, file_path],
                                    stdout=devnull, stderr=devnull).pid

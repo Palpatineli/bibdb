@@ -1,5 +1,5 @@
-from ..entry.main import Session, Item, Person, and_, Keyword
 from ..entry.file_object import PdfFile, CommentFile
+from ..entry.main import Session, Item, Person, and_, Keyword
 from ..formatter.aggregate import AuthoredList
 from ..formatter.entry import SimpleFormatter, BibtexFormatter
 from ..reader.pandoc import PandocReader
@@ -29,6 +29,7 @@ def delete_paper(args):
     item = session.query(Item).filter(Item.id == args.paper_id).one()
     session.delete(item)
     session.commit()
+    print('entry with id {} has been delete'.format(args.paper_id))
 
 
 def open_file(args):
@@ -38,10 +39,10 @@ def open_file(args):
         raise ValueError("can't find item with id " + args.paper_id)
     for file_type in file_types:
         if file_type == 'pdf':
-            for file in session.query(PdfFile).filter(Item.id == args.paper_id).all():
+            for file in session.query(PdfFile).join(Item).filter(Item.id == args.paper_id).all():
                 file.open()
         if file_type == 'comment':
-            comment = session.query(CommentFile).filter(Item.id == args.paper_id).first()
+            comment = session.query(CommentFile).join(Item).filter(Item.id == args.paper_id).first()
             if comment is None:
                 item = session.query(Item).filter(Item.id == args.paper_id).one()
                 comment = CommentFile.new(item)
@@ -58,6 +59,8 @@ def output(args):
         item_list = session.query(Item).all()
     else:
         item_list = session.query(Item).filter(Item.id.in_(args.source.split(','))).all()
+    if len(item_list) == 0:
+        print('entry has not been found for id: {}'.format(args.source))
     if args.format == 'bib':
         print('\n'.join((BibtexFormatter()(item) for item in item_list)))
     elif args.format == 'str':
@@ -101,7 +104,7 @@ def initialize(_):
             with zf.open(zf.namelist()[0]) as fp:
                 add_journals(fp)
     # create main database
-    from ..entry import main, file_object
+    from ..entry import main
     session = main.Session()
     main.ItemBase.metadata.create_all(main.engine)
     session.commit()

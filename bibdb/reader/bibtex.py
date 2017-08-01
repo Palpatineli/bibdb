@@ -1,8 +1,10 @@
-from typing import Set, List, Tuple, Union, Dict, TextIO
 import re
-import bibtexparser
-from .main import Reader
 from calendar import month_abbr, month_name
+from typing import Set, List, Tuple, Union, Dict
+
+import bibtexparser
+
+from .main import Reader
 
 month_index = {name.lower(): number for number, name in enumerate(month_name)}
 month_index.update({name.lower(): number for number, name in enumerate(month_abbr)})
@@ -93,6 +95,11 @@ def __custom_filter(entry: Dict[str, Union[str, int]]) -> Dict[str, Union[str, i
         item = __filter_common(entry[key])
         if key in __filter_dict:
             item = __filter_dict[key](item)
+        # noinspection PyBroadException,PyBroadException
+        try:
+            item = int(item)
+        except:
+            pass
         entry[key] = item
     return entry
 
@@ -103,7 +110,7 @@ _parser.customization = __custom_filter
 
 class BibtexReader(Reader):
     # noinspection PyMissingConstructor
-    def __init__(self, fp: TextIO):
+    def __init__(self, fp):
         self.fp = fp
 
     def __call__(self):

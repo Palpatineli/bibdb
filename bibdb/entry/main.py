@@ -1,9 +1,9 @@
 from sqlalchemy import Column, Integer, String, UniqueConstraint, ForeignKey, Table
 from sqlalchemy import create_engine, and_
+from sqlalchemy.event import listens_for
 from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship, backref
-from sqlalchemy.event import listens_for
 
 from ..config import config
 
@@ -42,6 +42,8 @@ class Item(ItemBase):
     optional_fields = {'address', 'month', 'note', 'doi', 'eprint', 'url'}
 
     def __init__(self, in_data: dict):
+        if 'ID' in in_data:
+            self.id = in_data['ID']
         for field_id in self.required_fields | self.optional_fields:
             if field_id in in_data:
                 setattr(self, field_id, in_data[field_id])
@@ -50,7 +52,7 @@ class Item(ItemBase):
 class Person(ItemBase):
     id = Column(Integer, primary_key=True)
     last_name = Column(SMALL_TEXT, index=True, nullable=False)
-    first_name = Column(SMALL_TEXT, nullable=False)
+    first_name = Column(SMALL_TEXT)
     authored = association_proxy("authorship", "item")
     edited = association_proxy("editorship", "item")
     __tablename__ = "person"
@@ -85,6 +87,9 @@ class Keyword(ItemBase):
     text = Column(SMALL_TEXT, unique=True)
     item = relationship(Item, secondary=keyword_assoc, backref="keyword")
 
+    def __str__(self):
+        return str(self.text)
+
 
 @listens_for(Session, 'after_flush')
 def delete_orphan_keyword(session, _):
@@ -107,6 +112,9 @@ class Journal(ItemBase):
         for key, value in data_in.items():
             if hasattr(self, key):
                 setattr(self, key, value)
+
+    def __str__(self):
+        return self.name
 
 
 @listens_for(Session, 'after_flush')
