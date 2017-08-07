@@ -121,11 +121,14 @@ def store_paper(args):
             return
 
         entry['author'] = [(normalize(last_name), normalize(first_name)) for last_name, first_name in entry['author']]
-        if not (('author' in entry) or ('editor' in entry)) or 'year' in entry:
+        if not (('author' in entry) or ('editor' in entry)) or ('year' not in entry):
             item.id = entry['ID']
-        item.id = entry['author'][0][0] if 'author' in entry else entry['editor'][0][0] + str(entry['year'])
+        else:
+            temp_str = (entry['author'][0][0] if 'author' in entry else entry['editor'][0][0]) + str(entry['year'])
+            item.id = temp_str.replace(' ', '-')
+
         while True:
-            conflicting_item = session.query(Item).filter(Item.id == item.id).first()
+            conflicting_item = session.query(Item).filter((Item.id == item.id) | (Item.title == item.title)).first()
             if conflicting_item is None:
                 break
             print('citation conflict!\n' + SimpleFormatter()(conflicting_item))
@@ -177,7 +180,7 @@ def store_paper(args):
         session.add(item)
         session.commit()
         print('successfully inserted the following entry:')
-        print(SimpleFormatter()(session.query(Item).filter(Item.id == item.id).one()))
+        print(SimpleFormatter()(item))
     except StorePaperException as e:
         session.rollback()
         print(e)
@@ -210,9 +213,9 @@ def add_person(session, name, order, relation_class, proxy, item_id):
                 person = persons[int(choice)]
                 if new_name:
                     person.first_name = new_name
-    exist_relation = session.query(relation_class).join(Person).filter(
-        (relation_class.order == order) & (Person.last_name == person.last_name) &
-        (Person.first_name == person.first_name) & (relation_class.item_id == item_id)).first()
+    exist_relation = session.query(relation_class).filter(
+        (relation_class.order == order) & (relation_class.person == person) &
+        (relation_class.item_id == item_id)).first()
     relation = exist_relation if exist_relation else relation_class(order=order, person=person)
     if relation not in proxy:
         proxy.append(relation)

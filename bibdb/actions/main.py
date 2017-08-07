@@ -29,36 +29,41 @@ def delete_paper(args):
     item = session.query(Item).filter(Item.id == args.paper_id).one()
     session.delete(item)
     session.commit()
-    print('entry with id {} has been delete'.format(args.paper_id))
+    print('entry with id {} has been deleted'.format(args.paper_id))
 
 
 def open_file(args):
     file_types = {'pdf'} if not (args.files and len(args.files) > 0) else set(args.files)
     session = Session()
-    if not session.query(session.query(Item.id == args.paper_id).exists()):
+    item = session.query(Item).filter(Item.id == args.paper_id).all()
+    if not item:
         raise ValueError("can't find item with id " + args.paper_id)
-    for file_type in file_types:
-        if file_type == 'pdf':
-            for file in session.query(PdfFile).join(Item).filter(Item.id == args.paper_id).all():
+    item = item[0]
+    if 'pdf' in file_types:
+        for file in item.file:
+            if isinstance(file, PdfFile):
                 file.open()
-        if file_type == 'comment':
-            comment = session.query(CommentFile).join(Item).filter(Item.id == args.paper_id).first()
-            if comment is None:
-                item = session.query(Item).filter(Item.id == args.paper_id).one()
-                comment = CommentFile.new(item)
-                item.file.append(comment)
-                session.commit()
-            comment.open()
+    if 'comment' in file_types:
+        for file in item.file:
+            if isinstance(file, CommentFile):
+                file.open()
+                return
+        comment = CommentFile.new(item)
+        item.file.append(comment)
+        session.commit()
+        comment.open()
 
 
 def output(args):
+    from os.path import splitext
     session = Session()
-    if args.source.endswith('.ast') or args.source.endswith('.json'):
+    if splitext(args.source)[-1] in {'.ast', '.json', '.txt', '.md'}:
         item_list = session.query(Item).filter(Item.id.in_(PandocReader(args.source)())).all()
     elif args.source.lower() == 'all':
         item_list = session.query(Item).all()
     else:
         item_list = session.query(Item).filter(Item.id.in_(args.source.split(','))).all()
+
     if len(item_list) == 0:
         print('entry has not been found for id: {}'.format(args.source))
     if args.format == 'bib':
@@ -74,7 +79,8 @@ def modify_keyword(args):
         item.keyword.extend((Keyword(text=x.strip()) for x in ' '.join(args.add).split(',')))
     if args.delete:
         for x in ' '.join(args.delete).split(','):
-            item.keyword.remove(Keyword(text=x.strip()))
+            keyword = session.query(Keyword).filter(Keyword.text == x.strip()).one()
+            item.keyword.remove(keyword)
     session.commit()
     print(SimpleFormatter()(item))
     print('\tKeywords: {0}'.format(', '.join((x.text for x in item.keyword))))

@@ -22,11 +22,11 @@ class AuthoredList(object):
         result_str = list()
         for author in authors:
             result_str.append(SimpleFormatter.name_filter([author]) + ':')
-            authored = sorted(author.authorship, key=lambda x: (x.item.year, x.order + 1))
+            authored = sorted(author.authorship, key=lambda x: (x.item.year, x.order))
             result_str.extend(('\t{0.id}: as {1} author, {2}'.format(
-                x.item, self._order_str(x.order), self.ind_formatter(x.item)) for x in authored))
-            edited = sorted([(x.item.year, x.order + 1, x.item) for x in author.editorship])
+                x.item, self._order_str(x.order + 1), self.ind_formatter(x.item)) for x in authored))
+            edited = sorted(author.editorship, key=lambda x: (x.item.year, x.order))
             result_str.extend(('\t{0.id}: as {1} editor, {2}'.format(
-                x[2], self._order_str(x[1]), self.ind_formatter(x[2])) for x in edited))
+                x.item, self._order_str(x.order + 1), self.ind_formatter(x.item)) for x in edited))
             result_str.append('')
         return '\n'.join(result_str)
