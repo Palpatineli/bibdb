@@ -1,5 +1,5 @@
-from typing import Union, TextIO, BinaryIO
 from abc import ABC, abstractmethod
+from typing import Union, TextIO, BinaryIO
 
 
 class Reader(ABC):

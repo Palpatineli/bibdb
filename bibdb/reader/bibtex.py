@@ -98,7 +98,7 @@ def __custom_filter(entry: Dict[str, Union[str, int]]) -> Dict[str, Union[str, i
         # noinspection PyBroadException,PyBroadException
         try:
             item = int(item)
-        except:
+        except (ValueError, TypeError):
             pass
         entry[key] = item
     return entry

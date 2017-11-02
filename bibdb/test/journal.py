@@ -1,8 +1,10 @@
-from unittest import TestCase
 from os import path, remove
+from unittest import TestCase
 from zipfile import ZipFile
-from pkg_resources import resource_stream, Requirement
+
 from bibdb.data.journal import add_journals, search_journal, config
+from pkg_resources import resource_stream, Requirement
+
 JOURNAL_LIST_FILE = "bibdb/data/journals.zip"
 
 

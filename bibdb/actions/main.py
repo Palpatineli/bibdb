@@ -1,3 +1,4 @@
+from .store_paper import update_keywords
 from ..entry.file_object import PdfFile, CommentFile
 from ..entry.main import Session, Item, Person, and_, Keyword
 from ..formatter.aggregate import AuthoredList
@@ -40,9 +41,13 @@ def open_file(args):
         raise ValueError("can't find item with id " + args.paper_id)
     item = item[0]
     if 'pdf' in file_types:
+        has_file = False
         for file in item.file:
             if isinstance(file, PdfFile):
                 file.open()
+                has_file = True
+        if not has_file:
+            print('There is no pdf file for {}'.format(item.id))
     if 'comment' in file_types:
         for file in item.file:
             if isinstance(file, CommentFile):
@@ -76,7 +81,8 @@ def modify_keyword(args):
     session = Session()
     item = session.query(Item).filter(Item.id == args.paper_id).one()
     if args.add:
-        item.keyword.extend((Keyword(text=x.strip()) for x in ' '.join(args.add).split(',')))
+        to_add = ' '.join(args.add).split(',')
+        update_keywords(session, set(to_add), item.keyword)
     if args.delete:
         for x in ' '.join(args.delete).split(','):
             keyword = session.query(Keyword).filter(Keyword.text == x.strip()).one()

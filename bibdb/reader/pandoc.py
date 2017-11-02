@@ -27,7 +27,7 @@ class PandocReader(Reader):
 
     def __call__(self) -> list:
         pandoc_dict = json.loads(self.input)
-        tokens = pandoc_dict[1]
+        tokens = pandoc_dict['blocks']
         citation_list = list()
         for section in tokens:
             for token in section['c']:

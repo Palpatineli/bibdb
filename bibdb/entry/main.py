@@ -72,9 +72,9 @@ class Authorship(ItemBase):
 
 class Editorship(ItemBase):
     item_id = Column(SMALL_TEXT, ForeignKey("item.id"), primary_key=True)
-    item = relationship(Item, backref=backref("editorship", cascade="all, delete-orphan"))
+    item = relationship(Item, backref=backref("editorship", cascade="all, delete-orphan"), lazy='joined')
     person_id = Column(Integer, ForeignKey("person.id"), primary_key=True)
-    person = relationship(Person, backref="editorship")
+    person = relationship(Person, backref="editorship", lazy='joined')
     order = Column(Integer)
     note = Column(String)
     __tablename__ = "editorship"
@@ -85,7 +85,7 @@ class Keyword(ItemBase):
     __tablename__ = 'keyword'
     id = Column(Integer, primary_key=True)
     text = Column(SMALL_TEXT, unique=True)
-    item = relationship(Item, secondary=keyword_assoc, backref="keyword")
+    item = relationship(Item, secondary=keyword_assoc, backref="keyword", lazy='joined')
 
     def __str__(self):
         return str(self.text)
@@ -125,7 +125,7 @@ def delete_orphan_journal(session, _):
 ## bibtex entry types
 class Article(Item):
     __mapper_args__ = {'polymorphic_on': 'object_type', 'polymorphic_identity': 'article'}
-    journal = relationship(Journal, backref="article")
+    journal = relationship(Journal, backref="article", lazy='joined')
     required_fields = Item.required_fields | {'journal_id'}
     optional_fields = Item.optional_fields | {'pages', 'volume', 'number'}
 

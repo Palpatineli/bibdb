@@ -1,7 +1,7 @@
 import json
 import os
-from os.path import isfile, expanduser, expandvars
 from io import TextIOWrapper
+from os.path import isfile, expanduser, expandvars
 
 from pkg_resources import Requirement, resource_stream
 
