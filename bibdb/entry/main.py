@@ -10,7 +10,7 @@ from ..config import config
 SMALL_TEXT = String(50)
 LARGE_TEXT = String(150)
 
-engine = create_engine('sqlite:///{}'.format(config['path']['database']))
+engine = create_engine('sqlite:///{}'.format(config['path']['database']), echo=True)
 ItemBase = declarative_base()
 Session = sessionmaker(engine)
 
@@ -32,12 +32,26 @@ keyword_assoc = Table('association', ItemBase.metadata,
                       Column('item_id', Integer, ForeignKey('item.id')),
                       Column('keyword_id', Integer, ForeignKey('keyword.id')))
 
+authorship = Table('authorship', ItemBase.metadata,
+                   Column('item_id', SMALL_TEXT, ForeignKey("item.id"), primary_key=True),
+                   Column('person_id', Integer, ForeignKey("person.id"), primary_key=True),
+                   Column('order', Integer), Column('note', String),
+                   UniqueConstraint("item_id", "order"))
+
+editorship = Table('editorship', ItemBase.metadata,
+                   Column('item_id', SMALL_TEXT, ForeignKey("item.id"), primary_key=True),
+                   Column('person_id', Integer, ForeignKey("person.id"), primary_key=True),
+                   Column('order', Integer), Column('note', String),
+                   UniqueConstraint("item_id", "order"))
+
 
 class Item(ItemBase):
-    """base class for all bib entry main table items"""
+    """Base class for all bib entry main table items."""
+
     __mapper_args__ = {'polymorphic_on': 'object_type'}
     __tablename__ = 'item'
-    author = association_proxy("authorship", "person"),
+    authorship = relationship("Authorship", lazy="joined", cascade="all, delete-orphan", backref="item")
+    authors = association_proxy("Authorship", "person"),
     required_fields = {'id', 'title', 'year'}
     optional_fields = {'address', 'month', 'note', 'doi', 'eprint', 'url'}
 
@@ -53,32 +67,19 @@ class Person(ItemBase):
     id = Column(Integer, primary_key=True)
     last_name = Column(SMALL_TEXT, index=True, nullable=False)
     first_name = Column(SMALL_TEXT)
-    authored = association_proxy("authorship", "item")
-    edited = association_proxy("editorship", "item")
     __tablename__ = "person"
     __table_args__ = (UniqueConstraint("last_name", "first_name"),)
 
 
 class Authorship(ItemBase):
-    item_id = Column(SMALL_TEXT, ForeignKey("item.id"), primary_key=True)
-    item = relationship(Item, backref=backref("authorship", cascade="all, delete-orphan"))
-    person_id = Column(Integer, ForeignKey("person.id"), primary_key=True)
-    person = relationship(Person, backref="authorship")
-    order = Column(Integer)
-    note = Column(String)
     __tablename__ = "authorship"
-    __table_args__ = (UniqueConstraint("item_id", "order"),)
+    person = relationship(Person, backref="authorship", lazy="joined")
 
 
 class Editorship(ItemBase):
-    item_id = Column(SMALL_TEXT, ForeignKey("item.id"), primary_key=True)
-    item = relationship(Item, backref=backref("editorship", cascade="all, delete-orphan"), lazy='joined')
-    person_id = Column(Integer, ForeignKey("person.id"), primary_key=True)
-    person = relationship(Person, backref="editorship", lazy='joined')
-    order = Column(Integer)
-    note = Column(String)
     __tablename__ = "editorship"
-    __table_args__ = (UniqueConstraint("item_id", "order"),)
+    item = relationship(Item, backref=backref("editorship", cascade="all, delete-orphan", lazy='joined'))
+    person = relationship(Person, backref="editorship", lazy='joined')
 
 
 class Keyword(ItemBase):
@@ -122,7 +123,7 @@ def delete_orphan_journal(session, _):
     session.query(Journal).filter(and_(~Journal.article.any())).delete(synchronize_session=False)
 
 
-## bibtex entry types
+# bibtex entry types
 class Article(Item):
     __mapper_args__ = {'polymorphic_on': 'object_type', 'polymorphic_identity': 'article'}
     journal = relationship(Journal, backref="article", lazy='joined')
@@ -132,7 +133,7 @@ class Article(Item):
 
 class Book(Item):
     __mapper_args__ = {'polymorphic_on': 'object_type', 'polymorphic_identity': 'book'}
-    editor = association_proxy('editorship', 'person')
+    editors = association_proxy('editorship', 'person')
     required_fields = Item.required_fields | {'publisher'}
     optional_fields = Item.optional_fields | {'volume', 'number', 'series', 'edition'}
 
@@ -145,21 +146,21 @@ class Booklet(Item):
 
 class InBook(Item):
     __mapper_args__ = {'polymorphic_on': 'object_type', 'polymorphic_identity': 'inbook'}
-    editor = association_proxy('editorship', 'person')
+    editors = association_proxy('editorship', 'person')
     required_fields = Item.required_fields | {'publisher', 'chapter', 'pages'}
     optional_fields = Item.optional_fields | {'volume', 'number', 'series', 'type', 'edition'}
 
 
 class InCollection(Item):
     __mapper_args__ = {'polymorphic_on': 'object_type', 'polymorphic_identity': 'incollection'}
-    editor = association_proxy('editorship', 'person')
+    editors = association_proxy('editorship', 'person')
     required_fields = Item.required_fields | {'booktitle', 'publisher'}
     optional_fields = Item.optional_fields | {'chapter', 'pages', 'volume', 'number', 'series', 'type', 'edition'}
 
 
 class InProceedings(Item):
     __mapper_args__ = {'polymorphic_on': 'object_type', 'polymorphic_identity': 'inproceedings'}
-    editor = association_proxy('editorship', 'person')
+    editors = association_proxy('editorship', 'person')
     required_fields = Item.required_fields | {'booktitle'}
     optional_fields = Item.optional_fields | {'publisher', 'organization', 'pages', 'volume', 'number', 'series'}
 
@@ -190,7 +191,7 @@ class PhdThesis(Item):
 
 class Proceedings(Item):
     __mapper_args__ = {'polymorphic_on': 'object_type', 'polymorphic_identity': 'proceedings'}
-    editor = association_proxy('editorship', 'person')
+    editors = association_proxy('editorship', 'person')
     optional_fields = Item.optional_fields | {'publisher', 'organization', 'volume', 'number', 'series'}
 
 
@@ -209,3 +210,4 @@ class Unpublished(Item):
 item_types = {'article': Article, 'book': Book,
               'inproceedings': InProceedings, 'unpublished': Unpublished,
               'incollection': InCollection, 'inbook': InBook, 'phdthesis': PhdThesis}
+

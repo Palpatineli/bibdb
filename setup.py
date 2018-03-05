@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='bibdb',
-    version='0.1',
+    version='0.1.1',
     packages=['bibdb'],
     url='https://github.com/Palpatineli/bibdb.git',
     entry_points={'console_scripts': ['bibdb=bibdb.main:parse_args',

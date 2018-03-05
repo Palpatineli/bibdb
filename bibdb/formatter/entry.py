@@ -32,7 +32,8 @@ class TitleFormatter(Formatter):
             return '% ' + author_list[0]
 
     def __call__(self, entry: Item):
-        str_list = [self.name_filter([x.person for x in entry.authorship]) if len(entry.authorship) > 0 else '',
+        authors = entry.author
+        str_list = [self.name_filter(authors) if len(authors) > 0 else '',
                     self.name_filter([x.person for x in entry.editorship]) if len(entry.editorship) > 0 else '',
                     '% {0.title}\n% {0.year}\n\n']
         return ''.join(str_list).format(entry)
@@ -85,8 +86,9 @@ class SimpleFormatter(Formatter):
         return '{0} & {1}'.format(', '.join(persons[0:-1]), persons[-1]) if len(persons) > 1 else persons[0]
 
     def __call__(self, entry: Item) -> str:
-        str_list = [self.name_filter([x.person for x in entry.authorship]),
-                    self.name_filter([x.person for x in entry.editorship])]
+        str_list = [self.name_filter([x.person for x in entry.authorship])]
+        if entry.editorship:
+            str_list.append(self.name_filter([x.person for x in entry.editorship]))
         for field_id in entry.optional_fields | entry.required_fields - {'id', 'journal_id'} | {'journal'}:
             if hasattr(entry, field_id) and getattr(entry, field_id) is not None:
                 value = getattr(entry, field_id)
@@ -161,3 +163,4 @@ class IdFormatter(Formatter):
         if suffix:
             result_str += suffix
         return result_str
+

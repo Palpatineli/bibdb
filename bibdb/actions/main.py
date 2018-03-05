@@ -1,3 +1,4 @@
+from sqlalchemy.orm import with_polymorphic
 from .store_paper import update_keywords
 from ..entry.file_object import PdfFile, CommentFile
 from ..entry.main import Session, Item, Person, and_, Keyword
@@ -9,20 +10,24 @@ from ..reader.pandoc import PandocReader
 def search_paper(args):
     session = Session()
     if args.author:
-        persons = session.query(Person).filter(Person.last_name == args.author).all()
+        persons = session.query(Person).filter(
+            Person.last_name == args.author).all()
         if len(persons) == 0:
             print("can't find author named " + args.author)
             return
-        print(AuthoredList()(persons))
+        print(AuthoredList(session)(persons))
     elif args.keyword:
+        entry = with_polymorphic(Item, '*')
         keywords = {x.strip() for x in ' '.join(args.keyword).split(',')}
-        item_list = session.query(Item).filter(and_(*(Item.keyword.any(Keyword.text == keyword)
-                                                      for keyword in keywords))).all()
+        item_list = session.query(entry).filter(
+            and_(*(Item.keyword.any(Keyword.text == keyword)
+                   for keyword in keywords))).all()
         if len(item_list) > 0:
             formatter = SimpleFormatter()
             print('\n'.join(formatter(item) for item in item_list))
         else:
-            print('No item with keyword "{0}" has been found'.format('", "'.join(keywords)))
+            print('No item with keyword "{0}" has been found'.format(
+                '", "'.join(keywords)))
 
 
 def delete_paper(args):
@@ -34,7 +39,8 @@ def delete_paper(args):
 
 
 def open_file(args):
-    file_types = {'pdf'} if not (args.files and len(args.files) > 0) else set(args.files)
+    file_types = {'pdf'} if not (args.files and len(args.files) > 0) else set(
+        args.files)
     session = Session()
     item = session.query(Item).filter(Item.id == args.paper_id).all()
     if not item:
@@ -63,11 +69,13 @@ def output(args):
     from os.path import splitext
     session = Session()
     if splitext(args.source)[-1] in {'.ast', '.json', '.txt', '.md'}:
-        item_list = session.query(Item).filter(Item.id.in_(PandocReader(args.source)())).all()
+        item_list = session.query(Item).filter(
+            Item.id.in_(PandocReader(args.source)())).all()
     elif args.source.lower() == 'all':
         item_list = session.query(Item).all()
     else:
-        item_list = session.query(Item).filter(Item.id.in_(args.source.split(','))).all()
+        item_list = session.query(Item).filter(
+            Item.id.in_(args.source.split(','))).all()
 
     if len(item_list) == 0:
         print('entry has not been found for id: {}'.format(args.source))
@@ -85,7 +93,8 @@ def modify_keyword(args):
         update_keywords(session, set(to_add), item.keyword)
     if args.delete:
         for x in ' '.join(args.delete).split(','):
-            keyword = session.query(Keyword).filter(Keyword.text == x.strip()).one()
+            keyword = session.query(Keyword).filter(
+                Keyword.text == x.strip()).one()
             item.keyword.remove(keyword)
     session.commit()
     print(SimpleFormatter()(item))
@@ -102,7 +111,8 @@ def initialize(_):
     # copy configuration file is not exist
     target_file = get_config_path()
     if not path.isfile(target_file):
-        source_file = resource_filename(Requirement('bibdb'), 'bibdb/data/bibdb.json')
+        source_file = resource_filename(
+            Requirement('bibdb'), 'bibdb/data/bibdb.json')
         print('moving example config file to ' + target_file)
         copy2(source_file, target_file)
     # create folders if not exist
@@ -111,7 +121,9 @@ def initialize(_):
     for file_type in config['files'].values():
         makedirs(path.expanduser(file_type['folder']), exist_ok=True)
     # create journal names database
-    with resource_stream(Requirement.parse('bibdb'), "bibdb/data/journals.zip") as file_stream:
+    with resource_stream(
+            Requirement.parse('bibdb'),
+            "bibdb/data/journals.zip") as file_stream:
         with ZipFile(file_stream) as zf:
             with zf.open(zf.namelist()[0]) as fp:
                 add_journals(fp)
