@@ -10,7 +10,7 @@ from ..config import config
 SMALL_TEXT = String(50)
 LARGE_TEXT = String(150)
 
-engine = create_engine('sqlite:///{}'.format(config['path']['database']), echo=True)
+engine = create_engine('sqlite:///{}'.format(config['path']['database']), echo=False)
 ItemBase = declarative_base()
 Session = sessionmaker(engine)
 
@@ -99,7 +99,8 @@ def delete_orphan_keyword(session, _):
 
 @listens_for(Session, 'after_flush')
 def delete_orphan_person(session, _):
-    session.query(Person).filter(and_(~Person.authored.any(), ~Person.edited.any())).delete(synchronize_session=False)
+    session.query(Person).filter(and_(~Person.authorship.any(), ~Person.editorship.any())).\
+        delete(synchronize_session=False)
 
 
 class Journal(ItemBase):
@@ -180,7 +181,7 @@ class MasterThesis(Item):
 class Misc(Item):
     __mapper_args__ = {'polymorphic_on': 'object_type', 'polymorphic_identity': 'misc'}
     required_fields = (Item.required_fields - {'year', 'title'})
-    optional_fields = Item.optional_fields | {'title', 'howpublished'}
+    optional_fields = Item.optional_fields | {'title', 'howpublished', 'year'}
 
 
 class PhdThesis(Item):
@@ -209,5 +210,6 @@ class Unpublished(Item):
 
 item_types = {'article': Article, 'book': Book,
               'inproceedings': InProceedings, 'unpublished': Unpublished,
-              'incollection': InCollection, 'inbook': InBook, 'phdthesis': PhdThesis}
+              'incollection': InCollection, 'inbook': InBook, 'phdthesis': PhdThesis,
+              'misc': Misc}
 
