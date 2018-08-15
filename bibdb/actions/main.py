@@ -100,7 +100,7 @@ def output(args):
         return
     for item in item_list:
         formatter(item)
-        buf.write('\n')
+    print(buf.getvalue())
 
 
 def modify_keyword(args):

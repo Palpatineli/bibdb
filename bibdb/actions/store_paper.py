@@ -1,7 +1,7 @@
 from ..data.journal import search_journal
 from ..entry.file_object import Unregistered, PdfFile, CommentFile
 from ..entry.main import Session, item_types, Item, Person, Authorship, Editorship, Keyword, Journal
-from ..formatter.entry import SimpleFormatter, FileNameFormatter
+from ..formatter.entry import SimpleFormatter, FileNameFormatter, format_once
 from ..reader.bibtex import BibtexReader
 from ..utils import normalize
 
@@ -131,7 +131,7 @@ def store_paper(args):
             conflicting_item = session.query(Item).filter((Item.id == item.id) | (Item.title == item.title)).first()
             if conflicting_item is None:
                 break
-            print('citation conflict!\n' + SimpleFormatter()(conflicting_item))
+            print('citation conflict!\n' + format_once(SimpleFormatter, conflicting_item))
             choice = input('(a)abort, (u)update entry, Input new citation?')
             if choice == 'a':
                 raise StorePaperException("manually aborted")
@@ -158,7 +158,7 @@ def store_paper(args):
         if temp_pdf_file is not None:
             pdf_files = [file for file in item.file if isinstance(file, PdfFile)]
             if len(pdf_files) == 0:
-                temp_pdf_file.move('pdf', FileNameFormatter()(item))
+                temp_pdf_file.move('pdf', format_once(FileNameFormatter, item))
             else:  # add or replace file
                 print("pdf_file exists!\n" + '\n'.join('{0}: {1.name}'.format(*x) for x in enumerate(pdf_files)))
                 choice = input('(c)do nothing; (N) replace the Nth file; or put a short word as new '
@@ -171,14 +171,14 @@ def store_paper(args):
                         session.delete(old_file)
                     except ValueError:
                         suffix = choice
-                        new_name = FileNameFormatter()(item, suffix)
+                        new_name = format_once(FileNameFormatter, item, suffix)
                     temp_pdf_file.move('pdf', new_name)
             item.file.append(temp_pdf_file)
             session.add(temp_pdf_file)
         session.add(item)
         session.commit()
         print('successfully inserted the following entry:')
-        print(SimpleFormatter()(item))
+        print(format_once(SimpleFormatter, item))
     except StorePaperException as e:
         session.rollback()
         print(e)

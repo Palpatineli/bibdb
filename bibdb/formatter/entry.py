@@ -17,19 +17,19 @@ class Formatter(object):
     def name_filter(persons: List[Person], buf) -> None:
         if len(persons) > 1:
             for person in persons[0: -2]:
-                buf.write(person.first_name)
+                buf.write(str.title(person.first_name))
                 buf.write(' ')
-                buf.write(person.last_name)
+                buf.write(str.title(person.last_name))
                 buf.write(', ')
             person = persons[-2]
-            buf.write(person.first_name)
+            buf.write(str.title(person.first_name))
             buf.write(' ')
-            buf.write(person.last_name)
+            buf.write(str.title(person.last_name))
             buf.write(' & ')
         person = persons[-1]
-        buf.write(person.first_name)
+        buf.write(str.title(person.first_name))
         buf.write(' ')
-        buf.write(person.last_name)
+        buf.write(str.title(person.last_name))
 
     def __call__(self, entry: Item) -> None:
         raise NotImplementedError
@@ -46,7 +46,7 @@ class TitleFormatter(Formatter):
         buf.write("\n% ")
         buf.write(entry.title)
         buf.write("\n% ")
-        buf.write(entry.year)
+        buf.write(str(entry.year))
         buf.write("\n\n")
 
 class FileNameFormatter(Formatter):
@@ -61,7 +61,7 @@ class FileNameFormatter(Formatter):
             buf.write(suffix)
         self.name_filter([x.person for x in entry.authorship], buf)
         buf.write('_')
-        buf.write(entry.year)
+        buf.write(str(entry.year))
         buf.write('_')
         buf.write(self.italic.sub(r'\1', entry.title.replace(' ', '_')))
 
