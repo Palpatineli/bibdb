@@ -147,12 +147,10 @@ def store_paper(args):
 
         update_keywords(session, new_keywords, item.keyword)
 
-        if 'author' in entry:
-            for idx, person in enumerate(entry['author']):
-                add_person(session, person, idx, Authorship, item.authorship, item.id)
-        if 'editor' in entry:
-            for idx, person in enumerate(entry['editor']):
-                add_person(session, person, idx, Editorship, item.editorship, item.id)
+        for idx, person in enumerate(entry.get('author', [])):
+            add_person(session, person, idx, Authorship, item.authorship, item.id)
+        for idx, person in enumerate(entry.get('editor', [])):
+            add_person(session, person, idx, Editorship, item.editorship, item.id)
 
         if 'journal' in entry:
             set_journal(session, entry['journal'], item)

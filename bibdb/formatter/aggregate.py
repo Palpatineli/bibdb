@@ -1,16 +1,15 @@
 """Formatters for aggregate data structure."""
 from typing import List
-from sqlalchemy.orm import with_polymorphic
-from .entry import SimpleFormatter
-from ..entry.main import Person, Authorship, Editorship, Item, Journal
+from io import StringIO
+from .entry import ColorFormatter
+from ..entry.main import Item
 
 ORDER_STR = {1: 'st', 2: 'nd', 3: 'rd'}
 
 
 class AuthoredList(object):
-    def __init__(self, session):
-        self.ind_formatter = SimpleFormatter()
-        self.session = session
+    def __init__(self):
+        self.ind_formatter = ColorFormatter()
 
     @staticmethod
     def _order_str(order: int) -> str:
@@ -19,20 +18,9 @@ class AuthoredList(object):
         else:
             return str(order) + 'th'
 
-    def __call__(self, authors: List[Person]) -> str:
-        if len(authors) == 0:
-            raise ValueError("no author found")
-        result_str = list()
-        entry = with_polymorphic(Item, '*')
-        for author in authors:
-            result_str.append(SimpleFormatter.name_filter([author]) + ':')
-            authored = self.session.query(entry, Authorship.order).join(Authorship).\
-                filter_by(person_id=author.id).all()
-            result_str.extend(('\t{0}: as {1} author, {2}'.format(
-                x.id, self._order_str(order + 1), self.ind_formatter(x)) for x, order in authored))
-            edited = self.session.query(entry).join(Editorship).filter_by(person_id=author.id).all()
-            if edited:
-                result_str.extend(('\t{0}: as editor, {1}'.format(x.id, self.ind_formatter(x)) for x in edited))
-            result_str.append('')
-        return '\n'.join(result_str)
-
+    def __call__(self, entries: List[Item]) -> str:
+        result: StringIO = StringIO()
+        for x, order in entries:
+            result.write(self.ind_formatter(x, order))
+            result.write("\n")
+        return result.getvalue()

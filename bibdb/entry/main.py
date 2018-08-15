@@ -92,17 +92,6 @@ class Keyword(ItemBase):
         return str(self.text)
 
 
-@listens_for(Session, 'after_flush')
-def delete_orphan_keyword(session, _):
-    session.query(Keyword).filter(~Keyword.item.any()).delete(synchronize_session=False)
-
-
-@listens_for(Session, 'after_flush')
-def delete_orphan_person(session, _):
-    session.query(Person).filter(and_(~Person.authorship.any(), ~Person.editorship.any())).\
-        delete(synchronize_session=False)
-
-
 class Journal(ItemBase):
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True, index=True, nullable=False)
@@ -117,11 +106,6 @@ class Journal(ItemBase):
 
     def __str__(self):
         return self.name
-
-
-@listens_for(Session, 'after_flush')
-def delete_orphan_journal(session, _):
-    session.query(Journal).filter(and_(~Journal.article.any())).delete(synchronize_session=False)
 
 
 # bibtex entry types

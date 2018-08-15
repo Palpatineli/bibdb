@@ -1,21 +1,29 @@
+from io import StringIO
 from sqlalchemy.orm import with_polymorphic
+from sqlalchemy import not_
+from colorama import init
 from .store_paper import update_keywords
 from ..entry.file_object import PdfFile, CommentFile
-from ..entry.main import Session, Item, Person, and_, Keyword
-from ..formatter.aggregate import AuthoredList
-from ..formatter.entry import SimpleFormatter, BibtexFormatter
+from ..entry.main import Session, Item, Person, and_, Keyword, Authorship
+from ..formatter.entry import SimpleFormatter, BibtexFormatter, ColorFormatter, format_once
 from ..reader.pandoc import PandocReader
 
+init()
 
 def search_paper(args):
     session = Session()
     if args.author:
-        persons = session.query(Person).filter(
-            Person.last_name == args.author).all()
-        if len(persons) == 0:
+        entry = with_polymorphic(Item, '*')
+        entries = session.query(entry, Authorship.order).join(Authorship).join(Person)\
+            .filter(Person.last_name==args.author).order_by(Person.first_name, entry.year).all()
+        if len(entries) > 0:
+            output = StringIO()
+            formatter = ColorFormatter(output)
+            for x, order in entries:
+                formatter(x, order)
+            print(output.getvalue())
+        else:
             print("can't find author named " + args.author)
-            return
-        print(AuthoredList(session)(persons))
     elif args.keyword:
         entry = with_polymorphic(Item, '*')
         keywords = {x.strip() for x in ' '.join(args.keyword).split(',')}
@@ -23,11 +31,13 @@ def search_paper(args):
             and_(*(Item.keyword.any(Keyword.text == keyword)
                    for keyword in keywords))).all()
         if len(item_list) > 0:
-            formatter = SimpleFormatter()
-            print('\n'.join(formatter(item) for item in item_list))
+            output = StringIO()
+            formatter = SimpleFormatter(output)
+            for item in item_list:
+                formatter(item)
+            print(output.getvalue())
         else:
-            print('No item with keyword "{0}" has been found'.format(
-                '", "'.join(keywords)))
+            print('No item with keyword "{0}" has been found'.format('", "'.join(keywords)))
 
 
 def delete_paper(args):
@@ -35,6 +45,8 @@ def delete_paper(args):
     item = session.query(Item).filter(Item.id == args.paper_id).one()
     session.delete(item)
     session.commit()
+    session.query(Person).filter(and_(not_(Person.editorship.any()), not_(Person.authorship.any()))).\
+        delete(synchronize_session='fetch')
     print('entry with id {} has been deleted'.format(args.paper_id))
 
 
@@ -79,10 +91,16 @@ def output(args):
 
     if len(item_list) == 0:
         print('entry has not been found for id: {}'.format(args.source))
+    buf = StringIO()
     if args.format == 'bib':
-        print('\n'.join((BibtexFormatter()(item) for item in item_list)))
+        formatter = BibtexFormatter(buf)
     elif args.format == 'str':
-        print('\n'.join((SimpleFormatter()(item) for item in item_list)))
+        formatter = SimpleFormatter(buf)
+    else:
+        return
+    for item in item_list:
+        formatter(item)
+        buf.write('\n')
 
 
 def modify_keyword(args):
@@ -97,7 +115,7 @@ def modify_keyword(args):
                 Keyword.text == x.strip()).one()
             item.keyword.remove(keyword)
     session.commit()
-    print(SimpleFormatter()(item))
+    print(format_once(SimpleFormatter, item))
     print('\tKeywords: {0}'.format(', '.join((x.text for x in item.keyword))))
 
 
@@ -106,13 +124,13 @@ def initialize(_):
     from shutil import copy2
     from zipfile import ZipFile
     from pkg_resources import Requirement, resource_filename, resource_stream
-    from ..config import config, get_config_path
-    from ..data.journal import add_journals
+    from bibdb.config import config, get_config_path
+    from bibdb.data.journal import add_journals
     # copy configuration file is not exist
     target_file = get_config_path()
     if not path.isfile(target_file):
         source_file = resource_filename(
-            Requirement('bibdb'), 'bibdb/data/bibdb.json')
+            Requirement.parse('bibdb'), 'bibdb/data/bibdb.json')
         print('moving example config file to ' + target_file)
         copy2(source_file, target_file)
     # create folders if not exist
@@ -128,7 +146,7 @@ def initialize(_):
             with zf.open(zf.namelist()[0]) as fp:
                 add_journals(fp)
     # create main database
-    from ..entry import main
+    from bibdb.entry import main
     session = main.Session()
     main.ItemBase.metadata.create_all(main.engine)
     session.commit()

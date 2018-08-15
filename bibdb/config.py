@@ -11,6 +11,8 @@ def get_config_path() -> str:
         return expandvars('%appdata/bibdb.json')
     elif os.name == 'posix' or os.name == 'mac':
         return expanduser('~/.config/bibdb.json')
+    else:
+        raise NotImplementedError("only windows and posix/mac are supported")
 
 
 def get_config():

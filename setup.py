@@ -12,7 +12,7 @@ setup(
     author='Keji Li',
     author_email='mail@keji.li',
     description='cross-platform management of bibliography from the command line',
-    install_requires=['sqlalchemy', 'bibtexparser'],
+    install_requires=['sqlalchemy', 'bibtexparser', 'colorama'],
     classifiers=[
         'Development Status :: 4 - Beta',
         'Environment :: Console',
