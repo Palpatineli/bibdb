@@ -1,9 +1,34 @@
+from typing import List
 import json
 import subprocess as sp
 from os.path import isfile, splitext
 
 from .main import Reader
 
+def recurse(x, buffer: List[str]):
+    dtype = type(x)
+    if dtype is dict:
+        if x['t'] == 'Cite':
+            recurse_cite(x['c'], buffer)
+        elif 'c' in x:
+            recurse(x['c'], buffer)
+    elif dtype is list:
+        for item in x:
+            recurse(item, buffer)
+
+def recurse_cite(x, buffer: List[str]):
+    dtype = type(x)
+    if dtype is dict:
+        if "citationId" in x:
+            buffer.append(x["citationId"])
+            return
+        elif 'c' in x:
+            dtype_1 = type(x['c'])
+            if dtype_1 is list or dtype_1 is dict:
+                recurse_cite(x['c'], buffer)
+    elif dtype is list:
+        for item in x:
+            recurse_cite(item, buffer)
 
 class PandocReader(Reader):
     # noinspection PyMissingConstructor
@@ -28,10 +53,6 @@ class PandocReader(Reader):
     def __call__(self) -> list:
         pandoc_dict = json.loads(self.input)
         tokens = pandoc_dict['blocks']
-        citation_list = list()
-        for section in tokens:
-            for token in section['c']:
-                if type(token) is dict and token['t'] == 'Cite':
-                    for citation in token['c'][0]:
-                        citation_list.append(citation['citationId'])
+        citation_list: List[str] = list()
+        recurse(tokens, citation_list)
         return citation_list

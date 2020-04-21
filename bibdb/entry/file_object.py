@@ -1,12 +1,14 @@
+from typing import Optional
 import os
 from glob import glob
 from os import path, makedirs
 
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship, backref, reconstructor
+from sqlalchemy.event import listens_for
 
-from .main import ItemBase, config, listens_for, Session
-from ..formatter.entry import TitleFormatter
+from .main import ItemBase, config, Session
+from ..formatter.entry import TitleFormatter, format_once
 
 SMALL_TEXT = String(50)
 LARGE_TEXT = String(150)
@@ -24,13 +26,15 @@ class PdfError(ValueError):
 
 class NewSearchable(object):
     _object_type = ''
+    def __init__(self, file_name, folder, ext):
+        raise NotImplementedError
 
     @classmethod
-    def find(cls, folder: str=None):
-        if folder and path.isdir(folder):
-            folder = folder
-        else:
-            folder = path.expanduser(config['files'][folder if folder else cls._object_type]['folder'])
+    def find(cls, folder: Optional[str] = None):
+        if folder is None:
+            folder = path.expanduser(config['files'][cls._object_type]['folder'])
+        elif not path.isdir(folder):
+            folder = path.expanduser(config['files'][folder]['folder'])
         extension = config['files'][cls._object_type]['extension']
         if not isinstance(extension, list):
             extension = [extension]
@@ -41,7 +45,6 @@ class NewSearchable(object):
             file_name = path.splitext(path.split(max(file_list, key=path.getatime))[1])[0]
             return cls(file_name, folder, ext)
         raise FileNotFoundError("No {0} file in {1}".format(cls._object_type, folder))
-
 
 class ItemFile(ItemBase, NewSearchable):
     id = Column(Integer, primary_key=True)
@@ -86,10 +89,10 @@ class ItemFile(ItemBase, NewSearchable):
                                    stdout=devnull, stderr=devnull).pid
         print(('a {0} file is opened (pid: {1})'.format(self._object_type, pid)))
 
-    def move(self, new_folder: str=None, new_name: str=None) -> None:
+    def move(self, new_folder: Optional[str] = None, new_name: Optional[str] = None) -> None:
         """update name to new_name or move to new folder"""
         old_path = repr(self)
-        if new_folder:
+        if new_folder is not None:
             if new_folder in config['files']:
                 new_folder = path.expanduser(config['files'][new_folder]['folder'])
             if not path.isdir(new_folder):
@@ -127,7 +130,7 @@ class CommentFile(ItemFile):
     def new(cls, entry):
         obj = cls(entry.id)
         with open(repr(obj), 'w') as fp:
-            fp.write(TitleFormatter()(entry))
+            fp.write(format_once(TitleFormatter, entry))
         return obj
 
 

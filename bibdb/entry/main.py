@@ -1,6 +1,5 @@
 from sqlalchemy import Column, Integer, String, UniqueConstraint, ForeignKey, Table
-from sqlalchemy import create_engine, and_
-from sqlalchemy.event import listens_for
+from sqlalchemy import create_engine
 from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship, backref

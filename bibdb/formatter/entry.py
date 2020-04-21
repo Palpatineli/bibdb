@@ -15,6 +15,8 @@ class Formatter(object):
 
     @staticmethod
     def name_filter(persons: List[Person], buf) -> None:
+        if len(persons) == 0:
+            return
         if len(persons) > 1:
             for person in persons[0: -2]:
                 buf.write(str.title(person.first_name))
@@ -40,9 +42,9 @@ class TitleFormatter(Formatter):
         buf.write("% ")
         if len(entry.authorship) > 0:
             self.name_filter([x.person for x in entry.authorship], buf)
-            self.buf
-        if len(entry.authorship) > 0:
-            self.name_filter([x.person for x in entry.authorship], buf)
+        if len(entry.editorship) > 0:
+            buf.write("\n")
+            self.name_filter([x.person for x in entry.editorship], buf)
         buf.write("\n% ")
         buf.write(entry.title)
         buf.write("\n% ")
@@ -55,15 +57,16 @@ class FileNameFormatter(Formatter):
     italic = re.compile(r'\\textit{([\w\s]+)}')
 
     def __call__(self, entry: Item, suffix=''):
-        buf = self.buf
+        buf = StringIO()
         buf.write(entry.id)
         if len(suffix) > 0:
             buf.write(suffix)
-        self.name_filter([x.person for x in entry.authorship], buf)
+        buf.write(entry.authorship[0].person.last_name)
         buf.write('_')
         buf.write(str(entry.year))
         buf.write('_')
         buf.write(self.italic.sub(r'\1', entry.title.replace(' ', '_')))
+        self.buf.write(self.sanitize(buf.getvalue()))
 
     @staticmethod
     def __shorten_name(string: str) -> str:
@@ -91,9 +94,9 @@ def get_file_name(entry: Item, suffix: str = '') -> str:
 
 
 class SimpleFormatter(Formatter):
-    _filters = {'chapter': lambda x: ' Chapter {0}'.format(x),
-                'school': lambda x: ' From {0}'.format(x),
-                'institution': lambda x: ' From {0}'.format(x),
+    _filters = {'chapter': lambda x: f' Chapter {x}',
+                'school': lambda x: f' From {x}',
+                'institution': lambda x: f' From {x}',
                 'journal': lambda x: x.name}
 
     def __call__(self, entry: Item) -> None:
@@ -124,7 +127,8 @@ class SimpleFormatter(Formatter):
 class ColorFormatter(SimpleFormatter):
     def __init__(self, buf):
         super(ColorFormatter, self).__init__(buf)
-        self._filters['title'] = lambda x: ''.join((Fore.MAGENTA, x, Fore.RESET))
+        self._filters['title'] = lambda x: f'{Fore.MAGENTA}{x}{Fore.RESET}'
+        self._filters['year'] = lambda x: f'{Fore.RED}{x}{Fore.RESET}'
 
     @staticmethod
     def name_filter(persons: List[Person], buf, order: int = None) -> None:
@@ -254,8 +258,8 @@ class IdFormatter(Formatter):
         if suffix:
             buf.write(suffix)
 
-def format_once(formatter_class: Type[Formatter], entry: Item) -> str:
+def format_once(formatter_class: Type[Formatter], *entry) -> str:
     buf = StringIO()
     formatter = formatter_class(buf)
-    formatter(entry)
+    formatter(*entry)
     return buf.getvalue()

@@ -1,10 +1,10 @@
 from io import StringIO
 from sqlalchemy.orm import with_polymorphic
-from sqlalchemy import not_
+from sqlalchemy import not_, and_
 from colorama import init
 from .store_paper import update_keywords
 from ..entry.file_object import PdfFile, CommentFile
-from ..entry.main import Session, Item, Person, and_, Keyword, Authorship
+from ..entry.main import Session, Item, Person, Keyword, Authorship
 from ..formatter.entry import SimpleFormatter, BibtexFormatter, ColorFormatter, format_once
 from ..reader.pandoc import PandocReader
 
@@ -32,7 +32,7 @@ def search_paper(args):
                    for keyword in keywords))).all()
         if len(item_list) > 0:
             output = StringIO()
-            formatter = SimpleFormatter(output)
+            formatter = ColorFormatter(output)
             for item in item_list:
                 formatter(item)
             print(output.getvalue())
@@ -80,6 +80,7 @@ def open_file(args):
 def output(args):
     from os.path import splitext
     session = Session()
+    print("source: ", args.source)
     if splitext(args.source)[-1] in {'.ast', '.json', '.txt', '.md'}:
         item_list = session.query(Item).filter(
             Item.id.in_(PandocReader(args.source)())).all()

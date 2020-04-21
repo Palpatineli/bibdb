@@ -1,9 +1,9 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name='bibdb',
     version='0.1.1',
-    packages=['bibdb'],
+    packages=find_packages(),
     url='https://github.com/Palpatineli/bibdb.git',
     entry_points={'console_scripts': ['bibdb=bibdb.main:parse_args',
                                       'bibdb-import=bibdb.actions.store_paper:import_bib',

@@ -1,0 +1,33 @@
+digraph store_paper {
+    start [label="Get Keywords\nFind File\nPrint Info"]
+    process_entry [label="Process\nEntry"]
+    start -> process_entry
+    solve_entry_id [label="Solve Entry ID"]
+    process_entry -> solve_entry_id
+    solve_entry_id -> solve_entry_id
+    solve_author [label="Solve Author"]
+    solve_entry_id -> solve_author
+    solve_author -> solve_author [label="next"]
+    update_keywords [label="Update Keywords"]
+    solve_journal [label="Set Journal"]
+    solve_author -> solve_journal
+    solve_file [label="Solve File"]
+    solve_journal -> solve_file
+    solve_author -> solve_file
+    solve_file -> update_keywords [lhead=cluster_commit]
+    subgraph cluster_commit {
+        label="Commit"
+        update_keywords [label="Update Keywords"]
+        add_authors [label="Add Authors"]
+        add_editors [label="Add Editors"]
+        set_journal [label="Set Journal"]
+        set_entry [label="Set Entry"]
+        set_entry -> set_journal [dir=back]
+        set_journal -> add_editors [dir=back]
+        add_editors -> add_authors [dir=back]
+        add_authors -> update_keywords [dir=back]
+    }
+    end [label="End\nPrint Format"]
+    set_entry -> end [ltail=cluster_commit]
+    {rank=same; end; process_entry}
+}
