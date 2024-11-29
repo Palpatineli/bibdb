@@ -1,117 +1,93 @@
 import re
-from calendar import month_abbr, month_name
-from typing import Set, List, Tuple, Union, Dict
+from typing import List, Tuple, Union
 
 import bibtexparser
+from bibtexparser import middlewares as m
+from bibtexparser.middlewares.middleware import Library, Block, Entry
 
 from .main import Reader
 
-month_index = {name.lower(): number for number, name in enumerate(month_name)}
-month_index.update({name.lower(): number for number, name in enumerate(month_abbr)})
-quotations = {"'": "'", '(': ")", "{": "}", '"': '"'}
-title_regex = re.compile('<\s*i\s*>([\w\s]+)<\s*/i>')
-pages_regex = re.compile('^(\w*)(\d+)[-:_]{1,2}(\d+)$')
+
+class RemoveMoreEnclosingMiddleware(m.RemoveEnclosingMiddleware):
+    quotations = {"'": "'", '(': ")", "{": "}", '"': '"'}
+
+    @staticmethod
+    def _strip_enclosing(value: str) -> Tuple[str, str]:
+        item_str = value.strip(',')
+        if len(item_str) == 0:
+            return item_str, "no-enclosing"
+        enclosing = []
+        while item_str[0] in RemoveMoreEnclosingMiddleware.quotations and\
+            item_str[-1] == RemoveMoreEnclosingMiddleware.quotations[item_str[0]]:
+            enclosing.append(item_str[0])
+            item_str = item_str[1:-1]
+        return item_str, "no-enclosing" if len(enclosing) == 0 else "".join(enclosing)
 
 
-def __filter_common(item_str: str) -> str:
-    item_str = item_str.strip(',')
-    while True:
-        if item_str[0] in quotations:
-            if item_str[-1] == quotations[item_str[0]]:
-                item_str = item_str[1:-1]
-                continue
-        break
-    return item_str
+
+class PageParser(m.BlockMiddleware):
+    pages_regex = re.compile('^(\w*)(\d+)[-:_]{1,2}(\d+)$')
+
+    @staticmethod
+    def _filter_pages(pages: str) -> str:
+        """force pages formatting 123-126, 123-6, 123:126, 123--126, 123_126 to 123-126"""
+        if '.' in pages or '/' in pages:  # don't change pages in the form xx.xxx/xx.xxx
+            return pages
+        result = PageParser.pages_regex.match(pages)
+        if not result:
+            return pages
+        page_start, page_end = result.group(2), result.group(3)
+        if len(page_end) < len(page_start):  # add back truncated end page digits
+            page_end = page_start[0:len(page_start) - len(page_end)] + page_end
+        return '{0}{1}-{2}'.format(result.group(1), page_start, page_end)
+
+    def transform_entry(self, entry: Entry, library: Library) -> Union[Block, None]:
+        val = entry.get('pages')
+        if val is not None:
+            entry['pages'] = self._filter_pages(val.value)
+        return entry
 
 
-def __filter_people(people: str) -> List[Tuple[str, str]]:
-    """split people string
-    Args:
-        people: Last_name, F.N. and Last_name2, F.N2 and Last_name3, F.N3
-    Returns:
-        list of (last_name, first_middle_name)
-    """
-    people = people.replace('\n', ' ').split(' and ')
-    return [__filter_name(x) for x in people if not x.startswith('other')]
+class FileParser(m.BlockMiddleware):
+    @staticmethod
+    def _filter_file(file: str) -> List[str]:
+        return [name.strip() for name in file.split(', ')]
+
+    def transform_entry(self, entry: Entry, library: Library) -> Union[Block, None]:
+        for field in ('pdf_file', 'comment_file'):
+            val = entry.get(field)
+            if val is not None:
+                entry[field] = self._filter_file(val.value)
+        return entry
 
 
-def __filter_name(name: str) -> Union[None, Tuple[str, str]]:
-    """Make people names as surname, first and middle names
-    Returns:
-        [last_name, first_middle_name]
-    """
-    name = name.strip()
-    if len(name) < 1:
-        return None
-    if ',' in name:
-        name_split = name.split(',', 1)
-        last = name_split[0].strip()
-        firsts = [i.strip() for i in name_split[1].split()]
-    else:
-        name_split = name.split()
-        last = name_split.pop()
-        firsts = [i.replace('.', '. ').strip() for i in name_split]
-    if last in ['jnr', 'jr', 'junior']:
-        last = firsts.pop()
-    for item in firsts:
-        if item in ['ben', 'van', 'der', 'de', 'la', 'le']:
-            last = firsts.pop() + ' ' + last
-    return last.lower(), ' '.join(firsts).lower()
+class MiscParser(m.BlockMiddleware):
+    title_regex = re.compile('<\s*i\s*>([\w\s]+)<\s*/i>')
 
-
-def __filter_pages(pages: str) -> str:
-    """force pages formatting 123-126, 123-6, 123:126, 123--126, 123_126 to 123-126"""
-    if '.' in pages or '/' in pages:  # don't change pages in the form xx.xxx/xx.xxx
-        return pages
-    result = pages_regex.match(pages)
-    if not result:
-        return pages
-    page_start, page_end = result.group(2), result.group(3)
-    if len(page_end) < len(page_start):  # add back truncated end page digits
-        page_end = page_start[0:len(page_start) - len(page_end)] + page_end
-    return '{0}{1}-{2}'.format(result.group(1), page_start, page_end)
-
-
-def __filter_file(file: str) -> List[str]:
-    return [name.strip() for name in file.split(', ')]
-
-
-__filter_dict = {
-    'type': str.lower,
-    'author': __filter_people,
-    'editor': __filter_people,
-    'pages': __filter_pages,
-    'month': lambda x: int(month_index[x.lower()]) if x.lower() in month_index else int(x),
-    'pdf_file': __filter_file,
-    'comment_file': __filter_file,
-    'keyword': lambda x: {y.strip().lower() for y in x.split(',')},
-    'title': lambda x: title_regex.sub(r'\\textit{\1}', x),
-    'journal': lambda x: x[4:] if x.startswith("The ") or x.startswith("the ") else x}
-
-
-def __custom_filter(entry: Dict[str, Union[str, int]]) -> Dict[str, Union[str, int, List, Set]]:
-    entry = bibtexparser.customization.convert_to_unicode(entry)
-    for key in entry:
-        item = __filter_common(entry[key])
-        if key in __filter_dict:
-            item = __filter_dict[key](item)
-        # noinspection PyBroadException,PyBroadException
-        try:
-            item = int(item)
-        except (ValueError, TypeError):
-            pass
-        entry[key] = item
-    return entry
-
-
-_parser = bibtexparser.bparser.BibTexParser()
-_parser.customization = __custom_filter
+    def transform_entry(self, entry: Entry, library: Library) -> Union[Block, None]:
+        val = entry.get('keyword')
+        if val is not None:
+            entry['keyword'] = {y.strip().lower() for y in val.value.split(',')}
+        val = entry.get('title')
+        if val is not None:
+            entry['title'] = self.title_regex.sub(r'\\textit{\1}', val.value)
+        val = entry.get('journal')
+        if val is not None:
+            entry['journal'] = val.value.lstrip('The ').lstrip('the ')
+        return entry
 
 
 class BibtexReader(Reader):
+    layers = [
+        RemoveMoreEnclosingMiddleware(),
+        m.MonthIntMiddleware(),
+        m.SeparateCoAuthors(),
+        m.SplitNameParts(),
+    ]
+
     # noinspection PyMissingConstructor
-    def __init__(self, fp):
-        self.fp = fp
+    def __init__(self, text: str):
+        self.text = text
 
     def __call__(self):
-        return bibtexparser.load(self.fp, parser=_parser)
+        return bibtexparser.parse_string(self.text, append_middleware=self.layers)

@@ -3,8 +3,9 @@ from typing import List, Callable, Any, Dict, Type
 from io import StringIO
 from unicodedata import normalize
 
-from bibtexparser.bibdatabase import BibDatabase
-from bibtexparser.bwriter import BibTexWriter
+from bibtexparser.library import Library
+from bibtexparser import write_string
+from bibtexparser.model import Entry, Field
 from colorama import Fore
 
 from ..entry.main import Item, Person
@@ -210,15 +211,12 @@ class BibtexFormatter(Formatter):
         'journal': lambda x: x.name,
         'title': title_filter}
 
-    def __init__(self, buf, writer: BibTexWriter=None) -> None:
+    def __init__(self, buf) -> None:
         super(BibtexFormatter, self).__init__(buf)
-        self._bib_writer = writer
 
     def __call__(self, entry: Item) -> None:
-        db = BibDatabase()
+        db = Library()
         entry_dict = dict()
-        entry_dict['ENTRYTYPE'] = type(entry).__name__.lower()
-        entry_dict['ID'] = entry.id
         if len(entry.authorship) > 0:
             buf = StringIO()
             self.name_filter([x.person for x in entry.authorship], buf)
@@ -233,9 +231,12 @@ class BibtexFormatter(Formatter):
                 continue
             _filter = self._filters.get(field_id, None)
             entry_dict[field_id] = (_filter(value) if _filter is not None else str(value))
-        db.entries.append(entry_dict)
-        writer = self._bib_writer if self._bib_writer else BibTexWriter()
-        self.buf.write(writer.write(db))
+        db.add(Entry(
+            type(entry).__name__.lower(),
+            entry.id,
+            [Field(key, value) for key, value in entry_dict.items()]
+        ))
+        self.buf.write(write_string(db))
 
 
 class IdFormatter(Formatter):

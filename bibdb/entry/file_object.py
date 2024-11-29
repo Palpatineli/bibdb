@@ -141,5 +141,5 @@ class Unregistered(NewSearchable):
         self.extension = config['files'][self._object_type]['extension']
         self.file_path = path.join(folder, file_name + extension)
 
-    def open(self):
-        return open(self.file_path, 'r')
+    def read(self) -> str:
+        return open(self.file_path, 'r').read()

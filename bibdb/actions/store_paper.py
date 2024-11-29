@@ -1,3 +1,4 @@
+from pathlib import Path
 from ..data.journal import search_journal
 from ..entry.file_object import Unregistered, PdfFile, CommentFile
 from ..entry.main import Session, item_types, Item, Person, Authorship, Editorship, Keyword, Journal
@@ -11,7 +12,7 @@ class StorePaperException(Exception):
 def fix_authorship():
     import sys
     session = Session()
-    entries = BibtexReader(open(sys.argv[1], 'r'))().entries
+    entries = BibtexReader(Path(sys.argv[1]).read_text())().entries
     for entry in entries:
         item = session.query(Item).filter(Item.id == entry['ID']).first()
         if item:
@@ -77,7 +78,7 @@ def import_bib():
 
     import sys
     session = Session()
-    entries = BibtexReader(open(sys.argv[1], 'r'))().entries
+    entries = BibtexReader(Path(sys.argv[1]).read_text())().entries
     for entry in entries:
         item = session.query(Item).filter((Item.title == entry['title']) | (Item.id == entry['ID'])).first()
         if item:
@@ -95,7 +96,7 @@ def import_bib():
 
 def store_paper(args):
     bib_file = Unregistered.find()
-    entry = BibtexReader(bib_file.open())().entries[0]
+    entry = BibtexReader(bib_file.read())().entries[0]
     item = item_types[entry['ENTRYTYPE']](entry)
     new_keywords = {x.strip() for x in ' '.join(args.keyword).split(',')} if args.keyword else set()
     if 'keyword' in entry:
@@ -115,7 +116,9 @@ def store_paper(args):
             print("aborted")
             return
 
-        entry['author'] = [(normalize(last_name), normalize(first_name)) for last_name, first_name in entry['author']]
+        entry['author'] = [(normalize(" ".join(x.last)), normalize(" ".join(x.first))) for x in entry['author']]
+        if 'editor' in entry:
+            entry['editor'] = [(normalize(" ".join(x.last)), normalize(" ".join(x.first))) for x in entry['editor']]
         if not (('author' in entry) or ('editor' in entry)) or ('year' not in entry):
             item.id = entry['ID']
         else:
@@ -142,10 +145,12 @@ def store_paper(args):
 
         update_keywords(session, new_keywords, item.keyword)
 
-        for idx, person in enumerate(entry.get('author', [])):
-            add_person(session, person, idx, Authorship, item.authorship, item.id)
-        for idx, person in enumerate(entry.get('editor', [])):
-            add_person(session, person, idx, Editorship, item.editorship, item.id)
+        if 'author' in entry:
+            for idx, person in enumerate(entry['author']):
+                add_person(session, person, idx, Authorship, item.authorship, item.id)
+        if 'editor' in entry:
+            for idx, person in enumerate(entry['editor']):
+                add_person(session, person, idx, Editorship, item.editorship, item.id)
 
         if 'journal' in entry:
             set_journal(session, entry['journal'], item)
